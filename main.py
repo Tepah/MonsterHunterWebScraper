@@ -1,3 +1,5 @@
+import re
+
 import certifi
 import requests
 from bs4 import BeautifulSoup
@@ -153,6 +155,40 @@ def upload_monster_data(monster_data):
     client.close()
 
 
+def getMonsterIcons(link, monster_data, monster_name):
+    url = "https://monsterhunter.fandom.com" + link
+
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        print("Success!")
+        soup = BeautifulSoup(response.content, 'html.parser')
+    else:
+        print("Failure!")
+        return None
+    print(monster_name)
+    monster = monster_name.replace(' ', '_')
+    elements = soup.find_all('img', src=lambda value: monster in value)
+    src_list = [element['src'] for element in elements]
+    for i, src in enumerate(src_list):
+        if 'Icon' in src:
+            monster_data['icon'] = src
+            return
+    monster_data['icon'] = src_list[0] if src_list else None
+
+
+def update_monster_icons(monster_data):
+    load_dotenv()
+    client = MongoClient(os.getenv("DATABASE_URL"), tlsCAFile=certifi.where())
+    db = client['Monster-Data']
+    collection = db['monsters']
+    for monster in monster_data:
+        query = {'name': monster['name']}
+        new_values = {'$set': {'icon': monster['icon']}}
+        collection.update_one(query, new_values)
+    client.close()
+
+
 def main():
     all_monster_links = ["https://monsterhunter.fandom.com/wiki/Category:Monsters",
                          "https://monsterhunter.fandom.com/wiki/Category:Monsters?from=Giaprey",
@@ -166,10 +202,12 @@ def main():
     for name, link in monster_list_links:
         monster_data = {}
         monster_data['name'] = name
-        getMonsterData(link, monster_data)
+        # getMonsterData(link, monster_data)
+        getMonsterIcons(link, monster_data, name)
         monsters_data.append(monster_data)
     print(monsters_data)
-    upload_monster_data(monsters_data)
+    update_monster_icons(monsters_data)
+    # upload_monster_data(monsters_data)
 
 
 if __name__ == "__main__":
